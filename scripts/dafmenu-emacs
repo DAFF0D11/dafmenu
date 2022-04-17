@@ -1,0 +1,74 @@
+#!/bin/sh
+
+# https://github.com/DAFF0D11/dafmenu
+
+# SETUP
+# Set emacs title for wmctrl in your emacs config
+# (setq-default frame-title-format "EMACS")
+
+EMACS_TITLE="EMACS"
+COMMAND=dmenu_cmd
+
+dmenu_cmd(){
+    ../dmenu -p "$MODE" -i -c -l 30 -ex 'ctrl-a,ctrl-f,ctrl-g,ctrl-l,ctrl-o,ctrl-x'
+}
+
+get_all(){
+    emacsclient -e '(buffer-list)' | cut -c2- | rev | cut -c2- | rev | tr '^#' '\n'| sed -e 's/<buffer \(.*\)>/\1/' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' | tail -n +2
+}
+
+get_logs(){
+    get_all | grep "^\*"
+}
+
+get_magit(){
+    get_all | grep "^magit"
+}
+
+get_files(){
+    get_all | grep -v "^magit" | grep -v "^\*"
+}
+
+focus_window(){
+    wmctrl -i -a "$(wmctrl -l | grep "$EMACS_TITLE"  | cut -d ' ' -f1)"
+}
+
+switch_to_buffer(){
+    BUFFER=$(echo "$1" | tail -n +2)
+    emacsclient -e '(switch-to-buffer "'"$BUFFER"'")' 2>/dev/null 1>&2
+}
+
+kill_buffers(){
+    echo "$1" | tail -n +2 | xargs -I %% emacsclient -e '(kill-buffer "'"%%"'")' 2>/dev/null 1>&2
+}
+
+case $1 in
+    a) MODE="ALL";;
+    f) MODE="FILES";;
+    g) MODE="MAGIT";;
+    l) MODE="LOGS";;
+    *) MODE="FILES";;
+esac
+
+while true; do
+    case "$MODE" in
+        ALL) MODE_LIST=get_all;;
+        FILES) MODE_LIST=get_files;;
+        HIDDEN) MODE_LIST=get_hidden;;
+        LOGS) MODE_LIST=get_logs;;
+        MAGIT) MODE_LIST=get_magit;;
+    esac
+
+    CHOICE=$( "$MODE_LIST" | "$COMMAND" )
+
+    [ -z "$CHOICE" ] && exit 0
+
+    case "$CHOICE" in
+        ctrl-a*) MODE="ALL";;
+        ctrl-f*) MODE="FILES";;
+        ctrl-l*) MODE="LOGS";;
+        ctrl-g*) MODE="MAGIT";;
+        ctrl-x*) kill_buffers "$CHOICE"; break;;
+        *) switch_to_buffer "$CHOICE"; focus_window; break;;
+    esac
+done

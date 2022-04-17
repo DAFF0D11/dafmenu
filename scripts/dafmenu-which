@@ -1,0 +1,43 @@
+#!/bin/sh
+
+# https://github.com/DAFF0D11/dafmenu
+
+# SETUP
+# Which-key functionality using dmenu-suite
+# Note: keys should be lowercase, names should be uppercase
+
+dmenucmd(){
+    ../dmenu -ex ctrl-h,ctrl-x -c -l 3 -g 3 -b -r -n "$@"
+}
+
+CHOICE=$(printf "b-> BROWSER\nt-> TERMINAL" | dmenucmd)
+case "$CHOICE" in
+    b*) RESULT=$(printf "w-> WEATHER\nr-> REDDIT\ny-> YOUTUBE" | dmenucmd -p "Browser" )
+        case "$RESULT" in
+            w*) RESULT=$(printf "d-> DAILY\nm-> MONTHLY\nh-> HOURLY" | dmenucmd -p "Weather")
+                case "$RESULT" in
+                    d*) "$BROWSER" "https://weather.com/weather/today/" 2>/dev/null 1>&2;;
+                    m*) "$BROWSER" "https://weather.com/weather/monthly/" 2>/dev/null 1>&2;;
+                    h*) "$BROWSER" "https://weather.com/weather/hourbyhour/" 2>/dev/null 1>&2;;
+                esac ;;
+            r*) RESULT=$(printf "r-> HOME\na-> ALL\nn-> NEW\nh-> HOT" | dmenucmd -p "Reddit")
+                case "$RESULT" in
+                    a*) "$BROWSER" "https://www.reddit.com/r/all/" 2>/dev/null 1>&2;;
+                    r*) "$BROWSER" "https://www.reddit.com/" 2>/dev/null 1>&2;;
+                    n*) "$BROWSER" "https://www.reddit.com/new/" 2>/dev/null 1>&2;;
+                    h*) "$BROWSER" "https://www.reddit.com/hot/" 2>/dev/null 1>&2;;
+                esac ;;
+            y*) RESULT=$(printf "h-> HISTORY\ny-> SUBSCRIPTIONS\nw->WATCH-LATER" | dmenucmd -p "Youtube"  )
+                case "$RESULT" in
+                    y*) "$BROWSER" "https://www.youtube.com/feed/subscriptions" 2>/dev/null 1>&2;;
+                    h*) "$BROWSER" "https://www.youtube.com/feed/history" 2>/dev/null 1>&2;;
+                    w*) "$BROWSER" "https://www.youtube.com/playlist?list=WL" 2>/dev/null 1>&2;;
+                esac ;;
+        esac ;;
+
+    t*) RESULT=$(printf "h-> HTOP\nt-> TERMINAL\nl-> LS" | dmenucmd -p "Terminal" )
+        case "$RESULT" in
+            t*) $TERMINAL ;;
+            h*) $TERMINAL -e htop ;;
+        esac ;;
+esac

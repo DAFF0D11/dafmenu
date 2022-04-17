@@ -1,0 +1,131 @@
+From 3aaa973ec87047ff8a4741b31b306236604469aa Mon Sep 17 00:00:00 2001
+From: DAFF0D11 <[omitted]>
+Date: Sun, 24 Apr 2022 19:18:33 -0400
+Subject: [PATCH] fzf expect functionality in dmenu
+
+---
+ dmenu.c | 65 ++++++++++++++++++++++++++++++++++++++++-----------------
+ 1 file changed, 46 insertions(+), 19 deletions(-)
+
+diff --git a/dmenu.c b/dmenu.c
+index 839f6cc..3308b03 100644
+--- a/dmenu.c
++++ b/dmenu.c
+@@ -36,6 +36,7 @@ struct item {
+ 
+ static char text[BUFSIZ] = "";
+ static char *embed;
++static char *expected;
+ static int bh, mw, mh;
+ static int inputw = 0, promptw;
+ static int lrpad; /* sum of left and right padding */
+@@ -192,6 +193,19 @@ drawmenu(void)
+ 	drw_map(drw, win, 0, 0, mw, mh);
+ }
+ 
++static void expect(char *expect) {
++  if (sel && expected && strstr(expected, expect)) {
++    puts(expect);
++    puts(sel->text);
++    cleanup();
++    exit(1);
++  } else if (!sel && expected && strstr(expected, expect)){
++      puts(expect);
++        cleanup();
++        exit(1);
++  }
++}
++
+ static void
+ grabfocus(void)
+ {
+@@ -342,40 +356,49 @@ keypress(XKeyEvent *ev)
+ 
+ 	if (ev->state & ControlMask) {
+ 		switch(ksym) {
+-		case XK_a: ksym = XK_Home;      break;
+-		case XK_b: ksym = XK_Left;      break;
+-		case XK_c: ksym = XK_Escape;    break;
+-		case XK_d: ksym = XK_Delete;    break;
+-		case XK_e: ksym = XK_End;       break;
+-		case XK_f: ksym = XK_Right;     break;
+-		case XK_g: ksym = XK_Escape;    break;
+-		case XK_h: ksym = XK_BackSpace; break;
+-		case XK_i: ksym = XK_Tab;       break;
+-		case XK_j: /* fallthrough */
+-		case XK_J: /* fallthrough */
+-		case XK_m: /* fallthrough */
++		case XK_a: expect("ctrl-a"); ksym = XK_Home;      break;
++		case XK_b: expect("ctrl-b"); ksym = XK_Left;      break;
++		case XK_c: expect("ctrl-c"); ksym = XK_Escape;    break;
++		case XK_d: expect("ctrl-d"); ksym = XK_Delete;    break;
++		case XK_e: expect("ctrl-e"); ksym = XK_End;       break;
++		case XK_f: expect("ctrl-f"); ksym = XK_Right;     break;
++		case XK_g: expect("ctrl-g"); ksym = XK_Escape;    break;
++		case XK_h: expect("ctrl-h"); ksym = XK_BackSpace; break;
++		case XK_i: expect("ctrl-i"); ksym = XK_Tab;       break;
++		case XK_j: expect("ctrl-j"); /* fallthrough */
++		case XK_J:/* fallthrough */
++		case XK_l: expect("ctrl-l"); break;
++		case XK_m: expect("ctrl-m"); /* fallthrough */
+ 		case XK_M: ksym = XK_Return; ev->state &= ~ControlMask; break;
+-		case XK_n: ksym = XK_Down;      break;
+-		case XK_p: ksym = XK_Up;        break;
+-
+-		case XK_k: /* delete right */
++		case XK_n: expect("ctrl-n"); ksym = XK_Down; break;
++		case XK_p: expect("ctrl-p"); ksym = XK_Up;   break;
++		case XK_o: expect("ctrl-o"); break;
++		case XK_q: expect("ctrl-q"); break;
++		case XK_r: expect("ctrl-r"); break;
++		case XK_s: expect("ctrl-s"); break;
++		case XK_t: expect("ctrl-t"); break;
++
++		case XK_k: expect("ctrl-k");/* delete right */
+ 			text[cursor] = '\0';
+ 			match();
+ 			break;
+-		case XK_u: /* delete left */
++		case XK_u: expect("ctrl-u"); /* delete left */
+ 			insert(NULL, 0 - cursor);
+ 			break;
+-		case XK_w: /* delete word */
++		case XK_v: expect("ctrl-v"); break;
++		case XK_w: expect("ctrl-w"); /* delete word */
+ 			while (cursor > 0 && strchr(worddelimiters, text[nextrune(-1)]))
+ 				insert(NULL, nextrune(-1) - cursor);
+ 			while (cursor > 0 && !strchr(worddelimiters, text[nextrune(-1)]))
+ 				insert(NULL, nextrune(-1) - cursor);
+ 			break;
+-		case XK_y: /* paste selection */
++		case XK_y: expect("ctrl-y"); /* paste selection */
+ 		case XK_Y:
+ 			XConvertSelection(dpy, (ev->state & ShiftMask) ? clip : XA_PRIMARY,
+ 			                  utf8, utf8, win, CurrentTime);
+ 			return;
++		case XK_x: expect("ctrl-x"); break;
++		case XK_z: expect("ctrl-z"); break;
+ 		case XK_Left:
+ 		case XK_KP_Left:
+ 			movewordedge(-1);
+@@ -490,6 +513,8 @@ insert:
+ 		break;
+ 	case XK_Return:
+ 	case XK_KP_Enter:
++        if(sel && expected && !(ev->state & ShiftMask))
++            puts("");
+ 		puts((sel && !(ev->state & ShiftMask)) ? sel->text : text);
+ 		if (!(ev->state & ControlMask)) {
+ 			cleanup();
+@@ -748,6 +773,8 @@ main(int argc, char *argv[])
+ 			mon = atoi(argv[++i]);
+ 		else if (!strcmp(argv[i], "-p"))   /* adds prompt to left of input field */
+ 			prompt = argv[++i];
++		else if (!strcmp(argv[i], "-ex"))   /* expect key */
++			expected = argv[++i];
+ 		else if (!strcmp(argv[i], "-fn"))  /* font or font set */
+ 			fonts[0] = argv[++i];
+ 		else if (!strcmp(argv[i], "-nb"))  /* normal background color */
+-- 
+2.30.2
+

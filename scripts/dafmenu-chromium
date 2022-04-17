@@ -1,0 +1,196 @@
+#!/bin/sh
+
+# https://github.com/DAFF0D11/dafmenu
+
+# DEPENDENCIES: xclip jq sqlite3
+
+# SETUP
+# In a Chromium based browser use the flag: --remote-debugging-port=9222
+# chromium --remote-debugging-port=9222
+
+# Brave-browser
+# BROWSER=brave-browser
+# BOOKMARK_PATH=$HOME/.config/BraveSoftware/Brave-Browser/Default/Bookmarks
+# HISTORY_PATH=$HOME/.config/BraveSoftware/Brave-Browser/Default/History
+
+# Chromium
+BROWSER=chromium
+BOOKMARK_PATH=$HOME/.config/chromium/Default/Bookmarks
+HISTORY_PATH=$HOME/.config/chromium/Default/History
+
+# Keep search engine queries out of history
+BLACKLIST_HIST_SEARCH_ENGINES='duckduckgo\|google\|amazon\|ebay'
+
+COMMAND=dmenu_cmd
+
+dmenu_cmd(){
+    ../dmenu \
+        -H "${XDG_CACHE_HOME:-$HOME/.cache/}/dafmenu-chromium.hist" \
+        -ex "ctrl-h,ctrl-t,ctrl-d,ctrl-b,ctrl-y" \
+        -l 10 -i -c -p "$PROMPT" "$@"
+}
+
+search() {
+    # Prefix style search
+    # Example
+    # 'dd '*) search_incognito 'https://duckduckgo.com/?q=%s' "${CHOICE#* }";;
+    ENGINE="$1"
+    SEARCH_QUERY="$2"
+    HEX_QUERY=$(echo "$SEARCH_QUERY" | hexdump -v -e '/1 " %02x"')
+    ENGINE_SEARCH=$(echo "$ENGINE" | sed "s/%s/${HEX_QUERY% 0a}/;s/[[:space:]]/%/g")
+    2>/dev/null 1>&2 "$BROWSER" "$ENGINE_SEARCH"
+}
+
+search_incognito() {
+    # Prefix style search incognito window
+    # Example
+    # 'idd '*) search_incognito 'https://duckduckgo.com/?q=%s' "${CHOICE#* }";;
+    ENGINE="$1"
+    SEARCH_QUERY="$2"
+    HEX_QUERY=$(echo "$SEARCH_QUERY" | hexdump -v -e '/1 " %02x"')
+    ENGINE_SEARCH=$(echo "$ENGINE" | sed "s/%s/${HEX_QUERY% 0a}/;s/[[:space:]]/%/g")
+    2>/dev/null 1>&2 "$BROWSER" --incognito "$ENGINE_SEARCH"
+}
+
+search_bang() {
+    # Duckduckgo !bang style
+    # Example
+    # *'!d'*) search_bang '!d' 'https://duckduckgo.com/?q=%s' "$CHOICE";;
+    BANG="$1"
+    ENGINE="$2"
+    SEARCH_QUERY=$(echo "$3" | sed "s/${BANG}//")
+    HEX_QUERY=$(echo "$SEARCH_QUERY" | hexdump -v -e '/1 " %02x"')
+    ENGINE_SEARCH=$(echo "$ENGINE" | sed "s/%s/${HEX_QUERY% 0a}/;s/[[:space:]]/%/g")
+    "$BROWSER" "$ENGINE_SEARCH" 2>/dev/null 1>&2
+}
+
+search_bang_incognito() {
+    # Duckduckgo !bang style incognito window
+    # Example
+    # *'!id'*) search_bang_incognito '!id' "https://duckduckgo.com/?q=%s" "$CHOICE";;
+    BANG="$1"
+    ENGINE="$2"
+    SEARCH_QUERY=$(echo "$3" | sed "s/${BANG}//")
+    HEX_QUERY=$(echo "$SEARCH_QUERY" | hexdump -v -e '/1 " %02x"')
+    ENGINE_SEARCH=$(echo "$ENGINE" | sed "s/%s/${HEX_QUERY% 0a}/;s/[[:space:]]/%/g")
+    "$BROWSER" --incognito "$ENGINE_SEARCH" 2>/dev/null 1>&2
+}
+
+cut_result(){
+    echo "$1" | rev | cut -f1 | rev | tail -n +2
+}
+
+resolve_id_to_url(){
+    ID=$(cut_result "$1")
+    TAB_LIST=$(curl -s localhost:9222/json/list )
+    TABS_JSON=$(echo "$TAB_LIST" | sed -e "s/^'//" -e "s/'$//" | jq -r 'map(select(.type == "page") | {id: .id, url: .url})')
+    echo "$TABS_JSON" | jq -r --arg ID "$ID" '.[] | select (.id==$ID) | .url' | rev | cut -f1 | rev
+}
+
+get_tabs(){
+    TAB_LIST=$(curl -s localhost:9222/json/list )
+    TABS_JSON=$(echo "$TAB_LIST" | sed -e "s/^'//" -e "s/'$//" | jq -r 'map(select(.type == "page") | {id: .id, title: .title})')
+    TAB_NAMES=$(echo "$TABS_JSON" | jq -r 'map(.title) | .[]')
+    TAB_ID=$(echo "$TABS_JSON" | jq -r 'map(.id) | .[]')
+    pr -2 -t -s <<eof
+$TAB_NAMES
+$TAB_ID
+eof
+}
+
+get_bookmarks(){
+    BOOK_NAME=$(jq  -r '.roots.bookmark_bar.children[].name' "$BOOKMARK_PATH")
+    BOOK_URL=$(jq  -r '.roots.bookmark_bar.children[].url' "$BOOKMARK_PATH")
+    pr -2 -t -s <<eof
+$BOOK_NAME
+$BOOK_URL
+eof
+}
+
+get_history(){
+    HIST=/tmp/history
+    cat "$HISTORY_PATH" > $HIST
+    SEP='{$$$}'
+    sqlite3 -separator $SEP  $HIST "select title, url from urls order by last_visit_time desc" \
+        | head -n 300 \
+        | grep -v ^$SEP \
+        |  tr $SEP '\t' \
+        | grep -v $BLACKLIST_HIST_SEARCH_ENGINES
+}
+
+close_tabs(){
+   cut_result "$CHOICE" | xargs -I {} 2>/dev/null 1>&2 curl -s localhost:9222/json/close/{}
+}
+
+case $1 in
+    -b) MODE=BOOKMARKS;;
+    -h) MODE=HISTORY;;
+    *) MODE=TABS;;
+esac
+
+while true; do
+    case $MODE in
+        TABS)
+            PROMPT="Tabs >"
+            MODE_LIST=get_tabs;;
+        BOOKMARKS)
+            PROMPT="Bookmarks >"
+            MODE_LIST=get_bookmarks;;
+        HISTORY)
+            PROMPT="History >"
+            MODE_LIST=get_history;;
+    esac
+
+    CHOICE=$("$MODE_LIST" | "$COMMAND")
+
+    [ -z "$CHOICE" ] && exit 1
+
+    case $CHOICE in
+        ctrl-b*) MODE=BOOKMARKS;;
+        ctrl-t*) MODE=TABS;;
+        ctrl-h*) MODE=HISTORY;;
+        ctrl-y*) RESULT_MODE=YANK; break;;
+        ctrl-d*) close_tabs; break;;
+        *"	"*) # the trick here is assuming selections have a tab character, and a searches do not.
+            case "$MODE" in
+                TABS) RESULT_MODE=TABS;;
+                BOOKMARKS) RESULT_MODE=BOOKMARKS;;
+                HISTORY) RESULT_MODE=HISTORY;;
+            esac; break;;
+        *) RESULT_MODE=SEARCH;break;;
+    esac
+done
+
+case $RESULT_MODE in
+    SEARCH)
+        case $CHOICE in
+            "dd "*) search "https://duckduckgo.com/?q=%s" "${CHOICE#* }";;
+            "ddi "*) search "https://duckduckgo.com/?q=%s&iar=images&iax=images&ia=images" "${CHOICE#* }";;
+            "ddl "*) search "https://lite.duckduckgo.com/lite/?q=%s" "${CHOICE#* }";;
+            *"!idi"*) search_bang_incognito "!idi" "https://duckduckgo.com/?q=%s&iar=images&iax=images&ia=images" "$CHOICE";;
+            *"!id"*) search_bang_incognito "!id" "https://duckduckgo.com/?q=%s" "$CHOICE";;
+            *"!di"*) search_bang "!di" "https://duckduckgo.com/?q=%s&iar=images&iax=images&ia=images" "$CHOICE";;
+            *"!dl"*) search_bang "!dl" "https://lite.duckduckgo.com/lite/?q=%s" "$CHOICE";;
+            *"!d"*) search_bang "!d" "https://duckduckgo.com/?q=%s" "$CHOICE";;
+            *"!az"*) search_bang "!az" "https://www.amazon.com/s/ref=nb_sb_noss_2?url=search-alias%3Daps&field-keywords=%s" "$CHOICE";;
+            *"!eb"*) search_bang "!eb" "https://www.ebay.com/sch/i.html?_nkw=%s" "$CHOICE";;
+            *"!g"*) search_bang "!g" "https://www.google.com/search?q=%s" "$CHOICE";;
+            *"!nx"*) search_bang "!nx" "https://search.nixos.org/packages?query=%s" "$CHOICE";;
+            *"!s"*) search_bang "!s" "https://www.startpage.com/do/metasearch.pl?query=%s" "$CHOICE";;
+            *"!wd"*) search_bang "!wd" "https://www.merriam-webster.com/dictionary/%s" "$CHOICE";;
+            *"!wfa"*) search_bang "!wfa" "https://www.wolframalpha.com/input/?i=%s" "$CHOICE";;
+            *"!yt"*) search_bang "!yt" "https://www.youtube.com/results?search_query=%s" "$CHOICE";;
+            'i// '*) 2>/dev/null 1>&2 "$BROWSER" --incognito "${CHOICE#* }";;
+            '// '*) 2>/dev/null 1>&2 "$BROWSER" "${CHOICE#* }";;
+            *) search "https://duckduckgo.com/?q=%s" "$CHOICE";;
+        esac;;
+    YANK)
+        case $MODE in
+            TABS) resolve_id_to_url "$CHOICE" | xclip -sel clip;;
+            BOOKMARKS) cut_result "$CHOICE" | xclip -sel clip;;
+            *) cut_result "$CHOICE" | xclip -sel clip;;
+        esac;;
+    TABS) [ "$CHOICE" ] && cut_result "$CHOICE" | xargs -I %% 2>/dev/null 1>&2 curl -s localhost:9222/json/activate/%%;;
+    BOOKMARKS) [ "$CHOICE" ] && cut_result "$CHOICE" | xargs -I %% 2>/dev/null 1>&2 "$BROWSER" %%;;
+    HISTORY) [ "$CHOICE" ] && cut_result "$CHOICE" | xargs -I %% 2>/dev/null 1>&2 "$BROWSER" %%;;
+esac

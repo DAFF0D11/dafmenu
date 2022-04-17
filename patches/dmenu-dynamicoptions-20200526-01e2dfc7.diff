@@ -1,0 +1,134 @@
+From 01e2dfc79126a7600463b4cf9fa16b4be6886cae Mon Sep 17 00:00:00 2001
+From: Tiago Teles <tiago.sequeira.teles@gmail.com>
+Date: Tue, 26 May 2020 19:55:55 +0100
+Subject: [PATCH] -dy flag for dynamic menu updating
+
+This patch adds a flag (`-dy`) which makes dmenu run the command given to it
+whenever input is changed with the current input as the last argument and
+update the option list according to the output of that command.
+---
+ config.def.h |  1 +
+ dmenu.c      | 43 ++++++++++++++++++++++++++++++++++++-------
+ 2 files changed, 37 insertions(+), 7 deletions(-)
+
+diff --git a/config.def.h b/config.def.h
+index 1edb6477..035b8777 100644
+--- a/config.def.h
++++ b/config.def.h
+@@ -7,6 +7,7 @@ static const char *fonts[] = {
+ 	"monospace:size=10"
+ };
+ static const char *prompt      = NULL;      /* -p  option; prompt to the left of input field */
++static const char *dynamic     = NULL;      /* -dy option; dynamic command to run on input change */
+ static const char *colors[SchemeLast][2] = {
+ 	/*     fg         bg       */
+ 	[SchemeNorm] = { "#bbbbbb", "#222222" },
+diff --git a/dmenu.c b/dmenu.c
+index 6b8f51b5..356d4cc9 100644
+--- a/dmenu.c
++++ b/dmenu.c
+@@ -210,9 +210,33 @@ grabkeyboard(void)
+ 	die("cannot grab keyboard");
+ }
+ 
++static void readstdin(FILE* stream);
++
++static void
++refreshoptions(){
++	int dynlen = strlen(dynamic);
++	char* cmd= malloc(dynlen + strlen(text)+2);
++	if(cmd == NULL)
++		die("malloc:");
++	sprintf(cmd,"%s %s",dynamic, text);
++	FILE *stream = popen(cmd, "r");
++	if(!stream)
++		die("popen(%s):",cmd);
++	readstdin(stream);
++	int pc = pclose(stream);
++	if(pc == -1)
++		die("pclose:");
++	free(cmd);
++	curr = sel = items;
++}
++
+ static void
+ match(void)
+ {
++	if(dynamic && *dynamic){
++		refreshoptions();
++	}
++
+ 	static char **tokv = NULL;
+ 	static int tokn = 0;
+ 
+@@ -234,7 +258,7 @@ match(void)
+ 		for (i = 0; i < tokc; i++)
+ 			if (!fstrstr(item->text, tokv[i]))
+ 				break;
+-		if (i != tokc) /* not all tokens match */
++		if (i != tokc && !(dynamic && *dynamic)) /* not all tokens match */
+ 			continue;
+ 		/* exact matches go first, then prefixes, then substrings */
+ 		if (!tokc || !fstrncmp(text, item->text, textsize))
+@@ -519,14 +543,14 @@ paste(void)
+ }
+ 
+ static void
+-readstdin(void)
++readstdin(FILE* stream)
+ {
+ 	char buf[sizeof text], *p;
+ 	size_t i, imax = 0, size = 0;
+ 	unsigned int tmpmax = 0;
+ 
+ 	/* read each line from stdin and add it to the item list */
+-	for (i = 0; fgets(buf, sizeof buf, stdin); i++) {
++	for (i = 0; fgets(buf, sizeof buf, stream); i++) {
+ 		if (i + 1 >= size / sizeof *items)
+ 			if (!(items = realloc(items, (size += BUFSIZ))))
+ 				die("cannot realloc %u bytes:", size);
+@@ -544,7 +568,8 @@ readstdin(void)
+ 	if (items)
+ 		items[i].text = NULL;
+ 	inputw = items ? TEXTW(items[imax].text) : 0;
+-	lines = MIN(lines, i);
++	if (!dynamic || !*dynamic)
++		lines = MIN(lines, i);
+ }
+ 
+ static void
+@@ -683,7 +708,7 @@ static void
+ usage(void)
+ {
+ 	fputs("usage: dmenu [-bfiv] [-l lines] [-p prompt] [-fn font] [-m monitor]\n"
+-	      "             [-nb color] [-nf color] [-sb color] [-sf color] [-w windowid]\n", stderr);
++	      "             [-nb color] [-nf color] [-sb color] [-sf color] [-w windowid]\n" "[-dy command]\n", stderr);
+ 	exit(1);
+ }
+ 
+@@ -726,6 +751,8 @@ main(int argc, char *argv[])
+ 			colors[SchemeSel][ColFg] = argv[++i];
+ 		else if (!strcmp(argv[i], "-w"))   /* embedding window id */
+ 			embed = argv[++i];
++		else if (!strcmp(argv[i], "-dy"))  /* dynamic command to run */
++			dynamic = argv[++i];
+ 		else
+ 			usage();
+ 
+@@ -754,9 +781,11 @@ main(int argc, char *argv[])
+ 
+ 	if (fast && !isatty(0)) {
+ 		grabkeyboard();
+-		readstdin();
++		if(!(dynamic && *dynamic))
++			readstdin(stdin);
+ 	} else {
+-		readstdin();
++		if(!(dynamic && *dynamic))
++			readstdin(stdin);
+ 		grabkeyboard();
+ 	}
+ 	setup();
+-- 
+2.26.2
+

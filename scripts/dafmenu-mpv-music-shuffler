@@ -1,0 +1,105 @@
+#!/bin/sh
+
+# https://github.com/DAFF0D11/dafmenu
+
+MUSIC="$HOME/Music"
+CACHE="$HOME/.cache/mpvcache"
+SOCKET="/tmp/mpvsocket"
+PLAYLIST="/tmp/mpvplaylist"
+
+dmenucmd(){ ../dmenu -i -ex "ctrl-h,ctrl-x" -c -l 30 -p "$PROMPT";}
+dmenucmddigit(){ ../dmenu -d "$DIGIT" -i -ex "ctrl-l,ctrl-x" -c -l 30 -p "$PROMPT";}
+
+COMMAND=dmenucmd
+COMMAND_DIGIT=dmenucmddigit
+
+initialise() {
+    INSTANCE_EXISTS=$(pgrep -f "mpv --idle --no-terminal --no-audio-display --input-ipc-server=$SOCKET")
+    if [ ! "$INSTANCE_EXISTS" ]; then
+        mpv --idle --no-terminal --no-audio-display --input-ipc-server="$SOCKET" &
+    fi
+}
+
+# Update the music database if it has changed.
+update_db() {
+    if [ ! -f "$CACHE" ] || [ "$MUSIC" -nt "$CACHE" ]; then
+        echo 'Caching music database...' >&2
+        find -L "$MUSIC" -type d -links 2 \
+            | sed -n "s|^$MUSIC/||p" \
+            | sort > "$CACHE"
+    fi
+}
+
+# Load all audio files in a directory.
+load_playlist(){
+    if [ -d "$1" ]; then
+        find "$1" -regex '.*\.\(mp3\|webm\|m4a\|flac\|ogg\|wav\)' \
+            | shuf  > "$PLAYLIST"
+        echo '{"command":["loadlist","'"$PLAYLIST"'","replace"]}' \
+            | socat - "$SOCKET" >&2
+        playerctl --player=mpv pause
+    else
+        echo "Playlist at '$1' not found." >&2
+    fi
+}
+
+choose(){
+    if [ "$1" ]; then
+        CURRENT_PLAYING_SONG=$(echo '{ "command": ["get_property", "path"] }' | socat - /tmp/mpvsocket | jq ".data" | tr -d "\"" )
+        LIST_OF_CHOICES=$(echo "$1" | tr ' ' '\n' | xargs -I % echo "${PLAYLIST_CHOICE_PATH}/%")
+        IS_IN_CHOICE=$(echo "$LIST_OF_CHOICES" | grep "$CURRENT_PLAYING_SONG")
+        if [ "$IS_IN_CHOICE" ]; then
+            LIST_MINUS_CHOICES=$(grep -v "$LIST_OF_CHOICES" < "$PLAYLIST")
+            echo "$LIST_OF_CHOICES" > "$PLAYLIST"
+            echo "$LIST_MINUS_CHOICES" | shuf >> "$PLAYLIST"
+        else
+            LIST_MINUS_CHOICES=$(grep -v "$LIST_OF_CHOICES" < "$PLAYLIST" | grep -v "$CURRENT_PLAYING_SONG" )
+            echo "$LIST_OF_CHOICES" > "$PLAYLIST"
+            echo "$LIST_MINUS_CHOICES" | shuf >> "$PLAYLIST"
+            echo "$CURRENT_PLAYING_SONG" >> "$PLAYLIST"
+        fi
+        echo '{"command":["loadlist","'"$PLAYLIST"'","replace"]}' | socat - "$SOCKET" >&2
+        playerctl --player=mpv pause
+        playerctl --player=mpv play
+    fi
+}
+
+case $1 in
+    -p) MODE=PLAYLIST ;;
+    -i) MODE=INITIALISE ;;
+    *) MODE=CHOOSE ;;
+esac
+
+initialise
+
+while true; do
+    case "$MODE" in
+        PLAYLIST)
+            update_db
+            PROMPT="PLAYLIST >"
+            CHOICE=$("$COMMAND" < "$CACHE") || exit ;;
+        CHOOSE)
+            PROMPT="SONG >"
+            if [ -e $PLAYLIST ]; then
+                CURRENT=$(echo '{ "command": ["get_property", "filename"] }' | socat - /tmp/mpvsocket | jq ".data" | tr -d "\"" )
+                DIGIT=$( nl -v 0 < "$PLAYLIST" | grep "$CURRENT" | cut -f1)
+                PLAYLIST_CHOICE_PATH=$(rev < "$PLAYLIST" | cut -d '/' -f2- | rev | head -n 1)
+                CHOICE=$(rev < "$PLAYLIST" | cut -d '/' -f1 | rev | sed 's/_/ /g' | "$COMMAND_DIGIT" | sed 's/ /_/g')
+            else
+                CHOICE=NOPLAYLIST
+            fi ;;
+        INITIALISE) initialise; break ;;
+    esac
+
+    case "$CHOICE" in
+        NOPLAYLIST)MODE=PLAYLIST ;;
+        ctrl-h*)MODE=CHOOSE ;;
+        ctrl-l*)MODE=PLAYLIST ;;
+        ctrl-x*) break;;
+        *) case "$MODE" in
+               PLAYLIST) CHOICE=$( echo "$CHOICE"  | tail -n +2)
+                         [ "$CHOICE" ] && load_playlist "$MUSIC/$CHOICE" >/dev/null 2>&1; MODE=CHOOSE ;;
+               CHOOSE) choose "$CHOICE" >/dev/null 2>&1; break;;
+           esac;;
+    esac
+done

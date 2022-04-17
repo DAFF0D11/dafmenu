@@ -1,0 +1,89 @@
+#!/bin/sh
+
+# https://github.com/DAFF0D11/dafmenu
+
+# DEPENDENCIES: xdotool
+
+# Uses xdotool to activate (switch to) your tmux window by class or title (name)
+# In .tmux.conf set title with: set-option -g set-titles-string 'TMUX'
+TMUX_ID="TMUX"
+
+get_panes(){
+    LIST=$(tmux list-panes -a -F '#S #T\t#D')
+
+    #Filter out current pane
+    # current_pane=$(tmux list-panes -F '#{pane_active} #D' | grep "^1" | cut -d ' ' -f2)
+    # echo "$list" | grep -v "$current_pane"
+
+    echo "$LIST"
+}
+get_windows(){
+    LIST=$(tmux list-windows -a -F '#{window_activity} #S #T\t#D' | sort -nr | cut -d ' '  -f2-)
+
+    #Filter out current window
+    # current_window=$(tmux list-windows -F '#{window_active} #D' | grep "^1" | cut -d ' ' -f2)
+    # echo "$list" | grep -v "$current_window"
+
+    echo "$LIST"
+}
+get_sessions(){
+    LIST=$(tmux list-sessions -F '#{session_activity} #S #T\t#D'| sort -nr | cut -d ' ' -f2-)
+
+    #Filter out current session
+    # current_session=$(tmux list-session | grep "attached" | cut -d ':' -f1)
+    # echo "$list" | grep -v "$current_session"
+
+    echo "$LIST"
+}
+
+get_focus(){
+    xdotool search -name "$TMUX_ID" windowactivate
+    # xdotool search -classname "$TMUX_ID" windowactivate
+}
+
+get_id(){
+    echo "$1" | rev | cut -f1 | rev
+}
+
+case $1 in
+    p) MODE=PANES;;
+    w) MODE=WINDOWS;;
+    s) MODE=SESSIONS;;
+    *) MODE=PANES;;
+esac
+
+while true; do
+    case $MODE in
+        PANES) MODE_LIST=get_panes;;
+        WINDOWS) MODE_LIST=get_windows;;
+        SESSIONS) MODE_LIST=get_sessions;;
+    esac
+
+    CHOICE=$("$MODE_LIST" | ../dmenu -p "$MODE" -c -l 30 -ex 'ctrl-p,ctrl-w,ctrl-s,ctrl-g,ctrl-x,ctrl-d')
+
+    [ -z "$CHOICE" ] && exit 0
+
+    case "$CHOICE" in
+        ctrl-p*)MODE=PANES;;
+        ctrl-w*)MODE=WINDOWS;;
+        ctrl-s*)MODE=SESSIONS;;
+        ctrl-g*) case $MODE in
+                    PANES)   get_id "$CHOICE" | xargs -I %% tmux join-pane -b -h -t:. -s %%;;
+                    WINDOWS) get_id "$CHOICE" | xargs -I %% tmux move-window -s %%;;
+                esac; break ;;
+        ctrl-x*) case $MODE in
+                    PANES)   get_id "$CHOICE" | xargs -I %% tmux swap-pane -t %% -s:.;;
+                    WINDOWS) get_id "$CHOICE" | xargs -I %% tmux swap-window -t %% -s:.;;
+                esac; break ;;
+        ctrl-d*) case $MODE in
+                    PANES)    get_id "$CHOICE" | xargs -I %% tmux kill-pane -t %%;;
+                    WINDOWS)  get_id "$CHOICE" | xargs -I %% tmux kill-window -t %%;;
+                    SESSIONS) get_id "$CHOICE" | xargs -I %% tmux kill-session -t %%;;
+                esac; break ;;
+            *) case $MODE in
+                    PANES)    get_id "$CHOICE" | xargs -I %% tmux switch-client -t %% && get_focus;;
+                    WINDOWS)  get_id "$CHOICE" | xargs -I %% tmux switch-client -t %% && get_focus;;
+                    SESSIONS) get_id "$CHOICE" | xargs -I %% tmux switch-client -t %% && get_focus;;
+               esac; break ;;
+    esac
+done

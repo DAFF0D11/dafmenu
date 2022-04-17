@@ -1,0 +1,5 @@
+#!/bin/sh
+
+# https://github.com/DAFF0D11/dafmenu
+
+rg -Nn "$1"  | cut -d '/' -f6-

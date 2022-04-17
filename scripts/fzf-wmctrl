@@ -1,0 +1,49 @@
+#!/bin/sh
+
+# https://github.com/DAFF0D11/dafmenu
+
+RAW_LIST=$(wmctrl -l)
+WINDOW_ID=$(echo "$RAW_LIST" | cut -d ' ' -f1 )
+WINDOW_TITLE=$(echo "$RAW_LIST" | cut -d ' ' -f5-)
+
+LIST=$(
+pr -2 -t -s <<eof
+$WINDOW_TITLE
+$WINDOW_ID
+eof
+)
+
+fzf_cmd() {
+    fzf -m \
+    --expect=ctrl-x,ctrl-g \
+    --with-nth=1 \
+    --delimiter="	" \
+    --bind=alt-enter:print-query \
+    --bind=ctrl-p:previous-history \
+    --bind=ctrl-n:next-history \
+    --bind=alt-p:previous-history \
+    --bind=alt-n:next-history \
+    --bind=ctrl-j:down \
+    --bind=ctrl-k:up \
+    --bind=alt-j:page-down \
+    --bind=alt-k:page-up \
+    --bind=ctrl-q:toggle-all \
+    --bind=ctrl-space:toggle \
+    --bind=tab:replace-query
+}
+
+cut_choice(){
+    echo "$1" | tail -n +2 | cut -f2
+}
+
+COMMAND=fzf_cmd
+
+CHOICE=$(echo "$LIST" | "$COMMAND")
+
+[ -z "$CHOICE" ] && exit 0
+
+case "$CHOICE" in
+    ctrl-g*) cut_choice "$CHOICE" | xargs -I %% wmctrl -i -R %% ;;
+    ctrl-x*) cut_choice "$CHOICE" | xargs -I %% wmctrl -i -c %% ;;
+    *) wmctrl -i -a "$(cut_choice "$CHOICE")";;
+esac

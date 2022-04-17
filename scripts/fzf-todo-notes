@@ -1,0 +1,165 @@
+#!/bin/sh
+
+# https://github.com/DAFF0D11/dafmenu
+
+TODO_LOCATION="$HOME/Documents/notes/todo.md"
+NOTES_LOCATION="$HOME/Documents/notes"
+
+EXTENSION="md"
+COMMAND=fzfcmd
+RIP_COMMAND=fzfripgrep
+NEW_NOTE=fzfnote
+
+# SETUP
+# Using Emacs with emacsclient
+# In your shell
+# export EDITOR="emacsclient -a ''"
+# In your init.el
+# (setq-default frame-title-format "EMACS")
+WINDOW="EMACS" # The name of the window to focus
+
+fzfcmd() {
+    fzf -m \
+        --expect=ctrl-u,ctrl-f,ctrl-g,ctrl-p,ctrl-l,ctrl-i,ctrl-t,ctrl-d \
+        --bind=alt-enter:print-query \
+        --bind=ctrl-p:previous-history \
+        --bind=ctrl-n:next-history \
+        --bind=alt-p:previous-history \
+        --bind=alt-n:next-history \
+        --bind=ctrl-j:down \
+        --bind=ctrl-k:up \
+        --bind=alt-j:page-down \
+        --bind=alt-k:page-up \
+        --bind=ctrl-q:toggle-all \
+        --bind=ctrl-space:toggle \
+        --bind=tab:replace-query
+}
+
+fzfnote(){
+    fzf -m \
+        --prompt="Note Title > " \
+        --bind=enter:print-query \
+        --expect=ctrl-u
+}
+
+fzfripgrep(){
+    # INITIAL_QUERY=""
+    # RG_PREFIX='rg "$1" $NOTES_LOCATION'
+    # FZF_DEFAULT_COMMAND="$RG_PREFIX $INITIAL_QUERY"
+    CHOICE=$(fzf --bind "change:reload: todo-notes-ripgrep {q} || true" \
+                 --sort \
+                 --multi \
+                 --expect=ctrl-x \
+                 --preview '[[ ! -z {} ]] && rg --pretty {}' \
+                 --ansi --phony --query "")
+    [ -n "$CHOICE" ] && echo "$CHOICE"
+}
+
+open_editor(){
+    [ -z "$2" ] && wmctrl -a "$WINDOW"; 2>/dev/null 1>&2 $EDITOR "$1" &
+    [ "$2" ]    && wmctrl -a "$WINDOW"; 2>/dev/null 1>&2 $EDITOR "$2" "$1" &
+}
+
+get_todo(){
+    TD=$(grep -e '- TODO' "$TODO_LOCATION")
+    DN=$(grep -e '- DONE' "$TODO_LOCATION")
+    printf "%s%s" "$TD" "$DN" | xargs -d "\n" -rI % echo '%	'
+}
+
+get_done(){
+    TD=$(grep -e '- TODO' "$TODO_LOCATION")
+    DN=$(grep -e '- DONE' "$TODO_LOCATION")
+    printf "%s%s" "$DN" "$TD" | xargs -d "\n" -rI % echo '%	'
+}
+
+get_notes(){
+    find "$NOTES_LOCATION" -type f -printf "%f\n" | xargs -d "\n" -rI % echo '%	'
+}
+
+get_line_number(){
+    cat -n "$TODO_LOCATION" | grep -e "$1" | cut -f1
+}
+
+get_full(){
+    sed -n "/${1}/,/^$/p" "$TODO_LOCATION"
+}
+
+get_full_cut(){
+    cutted=$( echo "$1" | cut -f2 | tail -n +2)
+    sed -n "/${cutted}/,/^$/p" "$TODO_LOCATION"
+}
+
+toggle_item(){
+    echo "$1" | tail -n +2 | tr -d "	" |
+        while IFS= read -r item; do
+            LINE=$( grep -n "$TODO_LOCATION" -e "$item" | cut -d":" -f1)
+            case $item in
+                "- TODO"*)sed -i "${LINE}s/TODO/DONE/" "$TODO_LOCATION";;
+                "- DONE"*)sed -i "${LINE}s/DONE/TODO/" "$TODO_LOCATION";;
+            esac
+        done
+}
+
+ripgrep_notes(){
+    GREP=$("$RIP_COMMAND") || exit 0
+    FILE_LINE=$(echo "$GREP" | tail -n +2 | cut -d ':' -f2)
+    FILE_NAME=$(echo "$GREP" | tail -n +2 | cut -d '/' -f1 | cut -d ':' -f1)
+    open_editor "$NOTES_LOCATION/$FILE_NAME" "+$FILE_LINE"
+}
+
+create_note(){
+    NOTE=$(echo | "$NEW_NOTE") || exit 0
+    open_editor "$NOTES_LOCATION/$NOTE.$EXTENSION"
+}
+
+create_todo(){
+    printf "\n- TODO %s\n" "$CHOICE" | sed 's/;/\n  /g' >> "$TODO_LOCATION"
+}
+
+open_todo(){
+    CHOICE=$(echo "$CHOICE" | tail -n +2 | cut -f1)
+    LN=$(grep -n "$TODO_LOCATION" -e "$CHOICE" | cut -d ":" -f1)
+    open_editor "$TODO_LOCATION" "+$LN"
+}
+
+open_note(){
+    CHOICE=$(echo "$CHOICE" | tail -n +2 | cut -f1)
+    $EDITOR "$NOTES_LOCATION/$CHOICE"
+}
+
+case $1 in
+    d) MODE="DONE";;
+    n) MODE="NOTES";;
+    t) MODE="TODO";;
+    *) MODE="TODO";;
+esac
+
+while true; do
+    case $MODE in
+        DONE) MODE_LIST=get_done;;
+        TODO) MODE_LIST=get_todo;;
+        NOTES) MODE_LIST=get_notes;;
+    esac
+
+    CHOICE=$("$MODE_LIST" | $COMMAND )
+
+    [ -z "$CHOICE" ] && exit 0
+
+    case $CHOICE in
+        ctrl-d*) MODE="DONE";;
+        ctrl-t*) MODE="TODO";;
+        ctrl-f*) MODE="NOTES";;
+        ctrl-g*) ripgrep_notes && break ;;
+        ctrl-i*) create_note && break ;;
+        ctrl-p*)
+            case $MODE in
+                TODO|DONE) toggle_item "$CHOICE";;
+            esac ;;
+        *"	"*)
+            case $MODE in
+                TODO|DONE) open_todo; break ;;
+                NOTES) open_note; break ;;
+            esac ;;
+        *) create_todo; break;;
+    esac
+done
