@@ -189,6 +189,8 @@ case $RESULT_MODE in
             *"!az"*) search_bang "!az" "https://www.amazon.com/s/ref=nb_sb_noss_2?url=search-alias%3Daps&field-keywords=%s" "$CHOICE";;
             *"!eb"*) search_bang "!eb" "https://www.ebay.com/sch/i.html?_nkw=%s" "$CHOICE";;
             *"!g"*) search_bang "!g" "https://www.google.com/search?q=%s" "$CHOICE";;
+            *"!bi"*) search_bang "!bi" "https://search.brave.com/images?q=%s" "$CHOICE";;
+            *"!b"*) search_bang "!b" "https://search.brave.com/search?q=%s&source=desktop" "$CHOICE";;
             *"!nx"*) search_bang "!nx" "https://search.nixos.org/packages?query=%s" "$CHOICE";;
             *"!s"*) search_bang "!s" "https://www.startpage.com/do/metasearch.pl?query=%s" "$CHOICE";;
             *"!wd"*) search_bang "!wd" "https://www.merriam-webster.com/dictionary/%s" "$CHOICE";;
