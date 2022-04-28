@@ -154,7 +154,7 @@ If you don't use the default profile in your chromium browser, you may need to m
 
 `ctrl-t` Show list of tabs (initial)<br>
 `ctrl-h` Show list of history<br>
-`ctrl-m` Show list of bookmarks<br>
+`ctrl-b` Show list of bookmarks<br>
 `ctrl-d` close selected tab (or multiple)<br>
 `ctrl-p` Previous search query<br>
 `ctrl-n` Next search query<br>
