@@ -2,7 +2,7 @@
 
 # https://github.com/DAFF0D11/dafmenu
 
-# DEPENDENCIES: xclip jq sqlite3
+# DEPENDENCIES: xclip jq sqlite3 curl
 
 # SETUP
 # In a Chromium based browser use the flag: --remote-debugging-port=9222

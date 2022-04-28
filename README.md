@@ -113,7 +113,7 @@ For uniform keybindings with dafmenu, fzf is run with the following options.
 
 Control your chromium browser through dmenu.<br>
 
-**Dependencies:** `xclip`, `jq`, `sqlite3`, a chromium based browser (only brave-browser and chromium tested)<br>
+**Dependencies:** `xclip`, `jq`, `sqlite3`,`curl`, a chromium based browser (only brave-browser and chromium tested)<br>
 
 ### Features
 
