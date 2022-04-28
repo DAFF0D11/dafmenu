@@ -50,7 +50,7 @@ The only patches not currently available from [suckless.org](https://tools.suckl
 The fzfexpect patches are a port of the fzf `expect` functionality limited to `ctrl-[a-z]` keys.<br>
 This allows you to supply your dmenu scripts with ad hoc keybindings to perform different actions on selections.
 
-![fzfexpect example gif](https://github.com/DAFF0D11/dafmenu/blob/master/assets/fzfexpect.gif)
+![fzfexpect example gif](https://raw.githubusercontent.com/DAFF0D11/dafmenu/master/assets/fzfexpect.gif)
 
 For example:
 
