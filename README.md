@@ -50,6 +50,8 @@ The only patches not currently available from [suckless.org](https://tools.suckl
 The fzfexpect patches are a port of the fzf `expect` functionality limited to `ctrl-[a-z]` keys.<br>
 This allows you to supply your dmenu scripts with ad hoc keybindings to perform different actions on selections.
 
+![fzfexpect example gif](https://github.com/DAFF0D11/dafmenu/blob/master/assets/fzfexpect.gif)
+
 For example:
 
 ``` sh
@@ -112,6 +114,8 @@ For uniform keybindings with dafmenu, fzf is run with the following options.
 ## [dafmenu-chromium](https://github.com/DAFF0D11/dafmenu/blob/master/scripts/dafmenu-chromium)
 
 Control your chromium browser through dmenu.<br>
+
+![dafmenu-chromium example gif](https://raw.githubusercontent.com/DAFF0D11/dafmenu/master/assets/dafmenu-chromium.gif)
 
 **Dependencies:** `xclip`, `jq`, `sqlite3`,`curl`, a chromium based browser (only brave-browser and chromium tested)<br>
 
