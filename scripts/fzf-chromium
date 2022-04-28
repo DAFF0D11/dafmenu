@@ -17,7 +17,7 @@
 BROWSER=chromium
 BOOKMARK_PATH=$HOME/.config/chromium/Default/Bookmarks
 HISTORY_PATH=$HOME/.config/chromium/Default/History
-
+HISTORY_FILE=$HOME/.fzf-chromium-history
 # Keep search engine queries out of history
 BLACKLIST_HIST_SEARCH_ENGINES='duckduckgo\|google\|amazon\|ebay'
 
@@ -26,6 +26,7 @@ COMMAND=fzfcmd
 fzfcmd() {
     fzf -m \
         --expect=ctrl-h,ctrl-t,ctrl-d,ctrl-b,ctrl-y \
+        --history="$HISTORY_FILE" \
         --prompt="$PROMPT" \
         --delimiter="	" \
         --with-nth=1 \
